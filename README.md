@@ -111,6 +111,12 @@ global_certificate_renewer_configmaps:
       data:
         root: |
           0 6 * * * /bin/bash /scripts/check_validity.sh > /dev/stdout 2>&1
+  - manifest:
+      metadata:
+        name: certificate-renewer-certificates
+        namespace: default
+
+        
 ```
 
 ```
