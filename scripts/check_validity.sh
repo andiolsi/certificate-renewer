@@ -6,6 +6,9 @@ DEBUG=${DEBUG:-}
 [ ! -z "${DEBUG}" ] && set -x
 
 
+
+
+POSTHOOK_SCRIPT_FORCE_RUN=${POSTHOOK_SCRIPT_FORCE_RUN:-0}
 MINIMUM_VALIDITY_DAYS=${MINIMUM_VALIDITY_DAYS:-29}
 MINIMUM_VALIDITY_SECONDS=${MINIMUM_VALIDITY_SECONDS:-$((${MINIMUM_VALIDITY_DAYS} * 24 * 60 * 60))}
 if [ -z "${CLOUDFLARE_API_TOKEN}" ]
@@ -26,7 +29,8 @@ then
     exit 1
 fi
 
-CERTBOT_WORKDIR="${CERTBOT_WORKDIR:-/etc/letsencrypt}"
+CERTIFICATE_RENEWER_WORKDIR="${CERTIFICATE_RENEWER_WORKDIR:-/certificate-renewer}"
+CERTBOT_CONFIGDIR="${CERTBOT_CONFIGDIR:-/etc/letsencrypt}"
 
 OLDIFS=$IFS
 IFS=';' read -r -a ARRAY_CERTIFICATE_DOMAIN_LIST <<< "$CERTIFICATE_DOMAIN_LIST"
@@ -35,7 +39,7 @@ IFS=$OLDIFS
 
 function generate_cert () {
     echo "generating certificates for domains: $1"
-    certbot certonly --manual --preferred-challenges=dns --manual-auth-hook=/scripts/authenticator.sh --manual-cleanup-hook=/scripts/cleanup.sh  -m "${EMAIL}"  -d "$1" --agree-tos -n --manual-public-ip-logging-ok
+    certbot certonly --manual --preferred-challenges=dns --manual-auth-hook=/scripts/authenticator.sh --manual-cleanup-hook=/scripts/cleanup.sh  -m "${EMAIL}"  -d "$1" --agree-tos -n --manual-public-ip-logging-ok --config-dir="${CERTBOT_CONFIGDIR}"
 }
 function check_validity () {
     _ENDDATE=$(openssl x509 -in "$1" -noout -enddate | cut -d= -f 2)
@@ -57,23 +61,36 @@ do
         DOMAIN="${CERTBOT_DOMAIN}"
     fi
     echo "###########   $DOMAIN    ##########"
-
-    if [ -d "${CERTBOT_WORKDIR}/live/${DOMAIN}" ] && [ -f "${CERTBOT_WORKDIR}/live/${DOMAIN}/cert.pem" ]
+    if [ ! -z "${PREHOOK_SCRIPT}" ]
     then
-        if [[ "$(check_validity ${CERTBOT_WORKDIR}/live/${DOMAIN}/cert.pem)" != 0 ]]
+        /bin/bash "${PREHOOK_SCRIPT}" "${DOMAIN}" "${CERTIFICATE_RENEWER_WORKDIR}"
+    fi
+
+    if [ -d "${CERTIFICATE_RENEWER_WORKDIR}/live/${DOMAIN}" ] && [ -h "${CERTIFICATE_RENEWER_WORKDIR}/live/${DOMAIN}/cert.pem" ]
+    then        
+        if [[ "$(check_validity ${CERTIFICATE_RENEWER_WORKDIR}/live/${DOMAIN}/cert.pem)" != 0 ]]
         then
             echo "certificate validity below expiry threshold, renewing it"
+            
             generate_cert "${CERTBOT_DOMAIN}"
             
             if [ ! -z "${POSTHOOK_SCRIPT}" ]
             then
-                /bin/bash "${POSTHOOK_SCRIPT}" "${DOMAIN}" "${CERTBOT_WORKDIR}/live/${DOMAIN}"
+                /bin/bash "${POSTHOOK_SCRIPT}" "${DOMAIN}"
             fi
         else
             echo "certificates validity exceeds expiry threshold, keeping it"
+            if [ ! -z "${POSTHOOK_SCRIPT}" ] && [ ${POSTHOOK_SCRIPT_FORCE_RUN} == 1 ]
+            then
+                /bin/bash "${POSTHOOK_SCRIPT}" "${DOMAIN}"
+            fi
         fi
     else
-        echo "directory '${DOMAIN}' for '${CERTBOT_DOMAIN}' does not exist at '${CERTBOT_WORKDIR}/live/${DOMAIN}', creating new certificates"
+        echo "directory '${DOMAIN}' for '${CERTBOT_DOMAIN}' does not exist at '${CERTIFICATE_RENEWER_WORKDIR}/live/${DOMAIN}', creating new certificates"
         generate_cert "${CERTBOT_DOMAIN}"
+        if [ ! -z "${POSTHOOK_SCRIPT}" ]
+        then
+            /bin/bash "${POSTHOOK_SCRIPT}" "${DOMAIN}"
+        fi
     fi
 done

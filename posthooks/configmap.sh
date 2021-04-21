@@ -8,14 +8,20 @@ DEBUG=${DEBUG:-}
 _errs=0
 
 DOMAIN="$1"
-CERTDIR="$2"
 TMPDIR="/tmp/${RANDOM}"
 mkdir -p "${TMPDIR}"
+
+CERTBOT_CONFIGDIR="${CERTBOT_CONFIGDIR:-/etc/letsencrypt}"
+CERTDIR="${CERTBOT_CONFIGDIR}/live/${DOMAIN}"
+
 cat "${CERTDIR}"/fullchain.pem "${CERTDIR}"/privkey.pem > "${TMPDIR}"/${DOMAIN}.combined.pem 
 
 
 TARGET_CONFIGMAP="${TARGET_CONFIGMAP:-}"
 TARGET_NAMESPACE="${TARGET_NAMESPACE:-default}"
+
+CERTIFICATE_RENEWER_NAMESPACE="${CERTIFICATE_RENEWER_NAMESPACE:-default}"
+CERTIFICATE_RENEWER_CONFIGMAP="${CERTIFICATE_RENEWER_CONFIGMAP:-certificate-renewer-certificates}"
 
 # Point to the internal API server hostname
 APISERVER=https://kubernetes.default.svc.cluster.local
@@ -63,11 +69,13 @@ fi
 if [ ${_errs} -ne 0 ]
 then
     echo "encountered ${_errs} errors during preflight check, please check above output for error messages"
- #   rm -rf "${TMPDIR}"
+    rm -rf "${TMPDIR}"
     exit 1
 fi
 
 
 set -e 
 curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -H 'Accept: application/json' ${APISERVER}/api/v1/namespaces/${TARGET_NAMESPACE}/configmaps/${TARGET_CONFIGMAP} -H 'Content-Type: application/strategic-merge-patch+json' -X PATCH  -d "{\"data\": { \"${DOMAIN}.combined.pem\" : \"$(cat ${TMPDIR}/${DOMAIN}.combined.pem  | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')\"}}" 
-#rm -rf "${TMPDIR}"
+rm -rf "${TMPDIR}"
+curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -H 'Accept: application/json' ${APISERVER}/api/v1/namespaces/${CERTIFICATE_RENEWER_NAMESPACE}/configmaps/${CERTIFICATE_RENEWER_CONFIGMAP} -H 'Content-Type: application/strategic-merge-patch+json' -X PATCH  -d "{\"data\": { \"${DOMAIN}.cert.pem\" : \"$(cat ${CERTDIR}/cert.pem  | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')\"}}" 
+curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -H 'Accept: application/json' ${APISERVER}/api/v1/namespaces/${CERTIFICATE_RENEWER_NAMESPACE}/configmaps/${CERTIFICATE_RENEWER_CONFIGMAP} -H 'Content-Type: application/strategic-merge-patch+json' -X PATCH  -d "{\"data\": { \"${DOMAIN}.privkey.pem\" : \"$(cat ${CERTDIR}/privkey.pem  | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')\"}}" 

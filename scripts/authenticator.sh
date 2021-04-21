@@ -29,6 +29,7 @@ RECORD_ID=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID
      -H     "Content-Type: application/json" \
      --data '{"type":"TXT","name":"'"$CREATE_DOMAIN"'","content":"'"$CERTBOT_VALIDATION"'","ttl":120}' \
              |  jq -r  '.result.id')
+
 # Save info for cleanup
 if [ ! -d /tmp/CERTBOT_$CERTBOT_DOMAIN ];then
         mkdir -m 0700 /tmp/CERTBOT_$CERTBOT_DOMAIN

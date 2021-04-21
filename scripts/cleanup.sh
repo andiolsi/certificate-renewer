@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-if [ -z "${CLOUDFLARE_API_TOKEN}"]
+if [ -z "${CLOUDFLARE_API_TOKEN}" ]
 then
     echo "Variable CLOUDFLARE_API_TOKEN is not set" >> /dev/stderr
     exit 1
