@@ -11,5 +11,4 @@ RUN apk add --update-cache bash openssl ca-certificates python3 py3-pip nginx no
 RUN pip3 install certbot-ext-auth
 RUN npm install 
 
-
 ENTRYPOINT [ "/certificate-renewer/entrypoint.sh" ]
