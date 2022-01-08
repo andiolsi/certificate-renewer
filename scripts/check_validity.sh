@@ -5,7 +5,8 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 DEBUG=${DEBUG:-}
 [ ! -z "${DEBUG}" ] && set -x
 
-
+# test mode
+TEST_MODE=${TEST_MODE:-}
 
 
 POSTHOOK_SCRIPT_FORCE_RUN=${POSTHOOK_SCRIPT_FORCE_RUN:-0}
@@ -39,7 +40,12 @@ IFS=$OLDIFS
 
 function generate_cert () {
     echo "generating certificates for domains: $1"
-    certbot certonly --manual --preferred-challenges=dns --manual-auth-hook=/scripts/authenticator.sh --manual-cleanup-hook=/scripts/cleanup.sh  -m "${EMAIL}"  -d "$1" --agree-tos -n --manual-public-ip-logging-ok --config-dir="${CERTBOT_CONFIGDIR}"
+    if [ ! -z ${TEST_MODE} ]
+    then
+        certbot certonly --manual --test-cert --preferred-challenges=dns --manual-auth-hook=/scripts/authenticator.sh --manual-cleanup-hook=/scripts/cleanup.sh  -m "${EMAIL}"  -d "$1" --agree-tos -n --manual-public-ip-logging-ok --config-dir="${CERTBOT_CONFIGDIR}"
+    else
+        certbot certonly --manual --preferred-challenges=dns --manual-auth-hook=/scripts/authenticator.sh --manual-cleanup-hook=/scripts/cleanup.sh  -m "${EMAIL}"  -d "$1" --agree-tos -n --manual-public-ip-logging-ok --config-dir="${CERTBOT_CONFIGDIR}"
+    fi
 }
 function check_validity () {
     _ENDDATE=$(openssl x509 -in "$1" -noout -enddate | cut -d= -f 2)
@@ -55,7 +61,8 @@ function check_validity () {
 }
 for CERTBOT_DOMAIN in ${ARRAY_CERTIFICATE_DOMAIN_LIST[@]}
 do
-    DOMAIN=$(expr match "${CERTBOT_DOMAIN}" '.*\.\(.*\..*\)')
+    #DOMAIN=$(expr match "${CERTBOT_DOMAIN}" '.*\.\(.*\..*\)')
+    DOMAIN=$(echo "${CERTBOT_DOMAIN}" | awk -F ',' '{print $(NF)}' | sed -e 's,\*\.,,')
     if [ -z "${DOMAIN}" ]
     then        
         DOMAIN="${CERTBOT_DOMAIN}"
